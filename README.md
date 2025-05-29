@@ -9,7 +9,7 @@ An interactive playground to experiment with prompt engineering and model parame
 ### Prerequisites
 
 - Node.js and npm installed
-- OpenAI API key (do not expose it in code)
+- Gemini API key (do not expose it in code)
 
 ### Setup
 
@@ -21,7 +21,7 @@ cd interactive-prompt-playground
 2.Install dependencies
 npm install
 3.Create a .env file and add your OpenAI API key:
-VITE_OPENAI_API_KEY=your-api-key-here
+VITE_GEMINI_API_KEY=your-api-key-here
 4.Start the development server:
 npm run dev
 
