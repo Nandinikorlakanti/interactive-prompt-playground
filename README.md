@@ -1,73 +1,53 @@
-# Welcome to your Lovable project
+# Interactive Prompt Playground
 
-## Project info
+An interactive playground to experiment with prompt engineering and model parameters using OpenAI's GPT models. This tool allows users to dynamically generate product descriptions by adjusting parameters like `temperature`, `max_tokens`, `presence_penalty`, `frequency_penalty`, and more to observe how these affect the output.
 
-**URL**: https://lovable.dev/projects/3f2d826d-6126-4ad3-918d-46f97cd65912
+---
 
-## How can I edit this code?
+## 🚀 How to Run the Playground
 
-There are several ways of editing your application.
+### Prerequisites
 
-**Use Lovable**
+- Node.js and npm installed
+- OpenAI API key (do not expose it in code)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/3f2d826d-6126-4ad3-918d-46f97cd65912) and start prompting.
+### Setup
 
-Changes made via Lovable will be committed automatically to this repo.
+1. Clone the repository:
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+git clone https://github.com/your-username/interactive-prompt-playground.git
+cd interactive-prompt-playground
+2.Install dependencies
+npm install
+3.Create a .env file and add your OpenAI API key:
+VITE_OPENAI_API_KEY=your-api-key-here
+4.Start the development server:
 npm run dev
-```
 
-**Edit a file directly in GitHub**
+🧩 Features
+| Feature           | Description                                                      |
+| ----------------- | ---------------------------------------------------------------- |
+| Model Selection   | Choose between `gpt-3.5-turbo` and `gpt-4`                       |
+| System Prompt     | Set a global instruction for the assistant                       |
+| User Prompt       | Provide the item or topic for which you want a description       |
+| Temperature       | Controls randomness/creativity (range: 0.0 to 2.0)               |
+| Max Tokens        | Limits output length (range: 50, 150, 300)                       |
+| Presence Penalty  | Encourages new topics to be discussed (range: 0.0 to 1.5)        |
+| Frequency Penalty | Reduces repetition in the output (range: 0.0 to 1.5)             |
+| Stop Sequences    | Enter phrases to stop generation                                 |
+| Results View      | Displays and compares generated responses with selected settings |
+| Export Button     | Export results to a file for further analysis                    |
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
 
-**Use GitHub Codespaces**
+📊 Output Table (Sample)
+| Model         | Temperature | Tokens | Presence Penalty | Frequency Penalty | Output Snippet                                                                 |
+| ------------- | ----------- | ------ | ---------------- | ----------------- | ------------------------------------------------------------------------------ |
+| gpt-3.5-turbo | 0.0         | 150    | 0.0              | 0.0               | "Introducing the iPhone. A smartphone with cutting-edge design..."             |
+| gpt-3.5-turbo | 0.7         | 150    | 0.7              | 0.7               | "Meet the revolutionary iPhone – not just a phone, but a pocket-sized studio!" |
+| gpt-4         | 1.2         | 300    | 1.5              | 1.5               | "The Tesla is more than a car—it’s a cosmic leap into the future..."           |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+🧠 Reflection
+While running tests with varying parameters, we noticed that increasing temperature results in more creative and imaginative outputs, sometimes bordering on fantastical. A value like 0.0 generates more factual, predictable descriptions, whereas 1.2 introduces poetic metaphors and vivid storytelling. The temperature parameter is excellent for toggling between precision and creativity.
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/3f2d826d-6126-4ad3-918d-46f97cd65912) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Adjusting presence_penalty and frequency_penalty greatly impacts the lexical and topical variety of the responses. High values for both penalties encourage fresh language and reduce redundancy. For instance, with presence_penalty = 1.5, the model avoids reusing common phrases and explores more niche descriptors. This playground helped us understand how fine-tuning these parameters can align outputs with specific use-cases—ranging from marketing copy to technical summaries.
