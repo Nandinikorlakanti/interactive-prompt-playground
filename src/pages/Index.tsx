@@ -1,13 +1,34 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import React from 'react';
+import { Header } from '@/components/Header';
+import { ConfigurationPanel } from '@/components/ConfigurationPanel';
+import { ResultsPanel } from '@/components/ResultsPanel';
+import { AnalysisPanel } from '@/components/AnalysisPanel';
+import { PlaygroundProvider } from '@/contexts/PlaygroundContext';
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
+    <PlaygroundProvider>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)]">
+          {/* Configuration Panel - Left */}
+          <div className="w-full lg:w-[30%] border-r border-gray-200 bg-white">
+            <ConfigurationPanel />
+          </div>
+          
+          {/* Results Panel - Center */}
+          <div className="w-full lg:w-[45%] border-r border-gray-200 bg-white">
+            <ResultsPanel />
+          </div>
+          
+          {/* Analysis Panel - Right */}
+          <div className="w-full lg:w-[25%] bg-white">
+            <AnalysisPanel />
+          </div>
+        </div>
       </div>
-    </div>
+    </PlaygroundProvider>
   );
 };
 
