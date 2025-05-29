@@ -44,7 +44,8 @@ export interface PlaygroundState {
   batchSessions: BatchSession[];
   currentBatchId?: string;
   isComparing: boolean;
-  variationCount?: number;
+  variationCount: number;
+  singleComparisonResult?: string;
 }
 
 interface PlaygroundContextType {
@@ -62,7 +63,7 @@ interface PlaygroundContextType {
   updateVariationCount: (count: number) => void;
   generateResponse: () => void;
   clearResults: () => void;
-  compareBatchResults: (batchId: string) => void;
+  compareResponses: (responsesToCompare: ParameterSet[]) => void;
 }
 
 const PlaygroundContext = createContext<PlaygroundContextType | undefined>(undefined);
@@ -92,6 +93,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     batchSessions: [],
     isComparing: false,
     variationCount: 5,
+    singleComparisonResult: undefined,
   });
 
   const updateModel = (model: 'gemini-1.5-flash-latest' | 'gemini-1.5-pro-latest') => {
@@ -134,7 +136,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     setState(prev => ({
       ...prev,
       isBatched,
-      ...(isBatched ? {} : { results: [], batchSessions: [], currentBatchId: undefined }),
+      ...(isBatched ? {} : { results: [], batchSessions: [], currentBatchId: undefined, singleComparisonResult: undefined }),
     }));
   };
 
@@ -153,8 +155,9 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     presencePenalty: number;
     frequencyPenalty: number;
   }> => {
-    if (state.variationCount === undefined) {
-      throw new Error('Variation count must be set before generating batch responses');
+    if (state.variationCount === undefined || state.variationCount <= 0) {
+      console.error('Invalid variation count for batch generation');
+      return [];
     }
     return Array(state.variationCount).fill(baseParams);
   };
@@ -177,6 +180,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
         ...prev,
         results: [],
         currentBatchId: batchId,
+        singleComparisonResult: undefined,
       }));
 
       const baseParams = {
@@ -187,7 +191,12 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
       };
 
       const parameterVariations = generateParameterVariations(baseParams);
-      const batchResults: ParameterSet[] = [];
+
+      if (parameterVariations.length === 0 && (state.variationCount === undefined || state.variationCount <= 0)) {
+        console.error("Cannot generate batch responses with invalid variation count.");
+        setState(prev => ({ ...prev, isRunning: false }));
+        return;
+      }
 
       const batchSession: BatchSession = {
         id: batchId!,
@@ -294,7 +303,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
         isLoading: true,
       };
 
-      setState(prev => ({ ...prev, results: [result] }));
+      setState(prev => ({ ...prev, results: [...prev.results, result], singleComparisonResult: undefined }));
 
       try {
         const systemPrompt = state.systemPrompt.trim();
@@ -350,29 +359,37 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     setState(prev => ({ ...prev, isRunning: false }));
   };
 
-  const compareBatchResults = async (batchId: string) => {
-    const batchSession = state.batchSessions.find(session => session.id === batchId);
-    
-    if (!batchSession || batchSession.results.length === 0) {
-      console.log('No batch results available for comparison.');
+  const compareResponses = async (responsesToCompare: ParameterSet[]) => {
+    if (!responsesToCompare || responsesToCompare.length === 0) {
+      console.log('No responses available for comparison.');
+      if (!state.isBatched) {
+        setState(prev => ({ ...prev, singleComparisonResult: 'No responses to compare.' }));
+      }
       return;
     }
-    
-    if (batchSession.isComparing) {
-       console.log('Comparison already in progress for this batch.');
-       return;
+
+    const isComparingBatch = responsesToCompare[0]?.batchId !== undefined;
+    const currentBatchSession = isComparingBatch && responsesToCompare[0]?.batchId
+      ? state.batchSessions.find(session => session.id === responsesToCompare[0].batchId)
+      : undefined;
+
+    if (state.isComparing || (currentBatchSession?.isComparing)) {
+      console.log('Comparison already in progress.');
+      return;
     }
 
     setState(prev => ({
       ...prev,
-      batchSessions: prev.batchSessions.map(session =>
-        session.id === batchId ? { ...session, isComparing: true, comparisonResult: undefined } : session
-      ),
+      isComparing: true,
+      singleComparisonResult: isComparingBatch ? state.singleComparisonResult : undefined,
+      batchSessions: state.batchSessions.map(session =>
+        session.id === currentBatchSession?.id ? { ...session, isComparing: true, comparisonResult: undefined } : session
+      )
     }));
 
     try {
       const systemPrompt = "You are an expert at analyzing and comparing multiple text outputs. Your task is to create a comprehensive comparison and synthesis of the following outputs.";
-      const userPrompt = `Compare and synthesize these outputs, highlighting their unique strengths and creating a comprehensive final version that combines the best elements:\n\n${batchSession.results.map((result, index) => `Output ${index + 1}:\n${result.output}\n`).join('\n')}`;
+      const userPrompt = `Compare and synthesize these outputs, highlighting their unique strengths and creating a comprehensive final version that combines the best elements:\n\n${responsesToCompare.map((result, index) => `Output ${index + 1}:\n${result.output}\n`).join('\n')}`;
 
       const genAIModel = genAI.getGenerativeModel({ model: state.model });
 
@@ -391,28 +408,32 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
 
       setState(prev => ({
         ...prev,
+        isComparing: false,
+        singleComparisonResult: isComparingBatch ? state.singleComparisonResult : comparisonResultText,
         batchSessions: prev.batchSessions.map(session =>
-          session.id === batchId ? {
+          session.id === currentBatchSession?.id ? {
             ...session,
             isComparing: false,
             comparisonResult: comparisonResultText
           } : session
-        ),
+        )
       }));
 
     } catch (error) {
-      console.error('Error comparing batch results:', error);
+      console.error('Error comparing results:', error);
       setState(prev => ({
         ...prev,
+        isComparing: false,
+        singleComparisonResult: isComparingBatch ? state.singleComparisonResult : `Error during comparison: ${error instanceof Error ? error.message : String(error)}`,
         batchSessions: prev.batchSessions.map(session =>
-          session.id === batchId ? { ...session, isComparing: false, comparisonResult: `Error during comparison: ${error instanceof Error ? error.message : String(error)}` } : session
+          session.id === currentBatchSession?.id ? { ...session, isComparing: false, comparisonResult: `Error during comparison: ${error instanceof Error ? error.message : String(error)}` } : session
         ),
       }));
     }
   };
 
   const clearResults = () => {
-    setState(prev => ({ ...prev, results: [], batchSessions: [], currentBatchId: undefined }));
+    setState(prev => ({ ...prev, results: [], batchSessions: [], currentBatchId: undefined, singleComparisonResult: undefined }));
   };
 
   return (
@@ -431,7 +452,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
       updateVariationCount,
       generateResponse,
       clearResults,
-      compareBatchResults,
+      compareResponses,
     }}>
       {children}
     </PlaygroundContext.Provider>

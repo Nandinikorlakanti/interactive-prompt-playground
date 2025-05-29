@@ -5,7 +5,7 @@ import { ResultsGrid } from '@/components/ResultsGrid';
 import { Download, Filter, Grid, List, GitCompare } from 'lucide-react';
 
 export const ResultsPanel: React.FC = () => {
-  const { state, compareBatchResults } = usePlayground();
+  const { state, compareResponses } = usePlayground();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list'); // Default to list view
 
   const exportResults = () => {
@@ -30,18 +30,31 @@ export const ResultsPanel: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold text-gray-900">Results</h2>
           <div className="flex items-center space-x-2">
-            {/* Removed grid/list view toggle as ResultsGrid now always shows list */}
+            {/* Batch specific buttons */}
             {state.isBatched && currentBatchSession && currentBatchSession.results.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => compareBatchResults(currentBatchSession.id)}
+                onClick={() => compareResponses(currentBatchSession.results)}
                 disabled={state.isComparing}
                 title="Compare Batch Results"
               >
                 <GitCompare className="w-4 h-4 mr-1" />
                 {state.isComparing ? 'Comparing...' : 'Compare'}
               </Button>
+            )}
+            {/* Single mode specific button */}
+            {!state.isBatched && state.results.length > 0 && (
+               <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => compareResponses(state.results)}
+                  disabled={state.results.length === 0 || state.isComparing}
+                  title="Compare Responses"
+               >
+                  <GitCompare className="w-4 h-4 mr-1" />
+                  {state.isComparing ? 'Comparing...' : 'Compare'}
+               </Button>
             )}
             <Button variant="outline" size="sm" onClick={exportResults} title="Export Results">
               <Download className="w-4 h-4" />
@@ -59,13 +72,19 @@ export const ResultsPanel: React.FC = () => {
             <span className="font-medium">Errors: <span className="font-normal">{state.results.filter(r => r.error).length}</span></span>
           </div>
         )}
-         {/* Comparison Result Display */}
-         {currentBatchSession?.comparisonResult && (
+         {/* Comparison Result Display - Conditional based on mode */}
+         {state.isBatched && currentBatchSession?.comparisonResult && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-800 whitespace-pre-wrap">
-               <h4 className="font-semibold mb-2">Comparison Summary:</h4>
+               <h4 className="font-semibold mb-2">Batch Comparison Summary:</h4>
                {currentBatchSession.comparisonResult}
             </div>
          )}
+          {!state.isBatched && state.singleComparisonResult && (
+             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-blue-800 whitespace-pre-wrap">
+                <h4 className="font-semibold mb-2">Comparison Summary:</h4>
+                {state.singleComparisonResult}
+             </div>
+          )}
       </div>
 
       {/* Results Content */}

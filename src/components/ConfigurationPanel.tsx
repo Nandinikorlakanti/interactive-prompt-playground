@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { ParameterSlider } from '@/components/ParameterSlider';
-import { Play, RotateCcw, Save } from 'lucide-react';
+import { Play, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 
@@ -175,6 +175,8 @@ export const ConfigurationPanel: React.FC = () => {
                   const value = parseInt(e.target.value);
                   if (!isNaN(value) && value > 0 && value <= 20) {
                     updateVariationCount(value);
+                  } else if (e.target.value === '') {
+                    updateVariationCount(0); // Allow clearing the input
                   }
                 }}
                 placeholder="Enter number of variations (1-20)..."
@@ -185,25 +187,30 @@ export const ConfigurationPanel: React.FC = () => {
 
         {/* Action Buttons */}
         <div className="space-y-3">
-          <Button 
-            onClick={generateResponse} 
-            disabled={state.isRunning || (state.isBatched && !state.variationCount)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg py-2"
-          >
-            <Play className="w-5 h-5 mr-2" />
-            {state.isRunning ? 'Generating...' : 'Generate Response'}
-          </Button>
+          {state.isBatched ? (
+            <Button
+              onClick={generateResponse}
+              disabled={state.isRunning || (state.isBatched && (!state.variationCount || state.variationCount <= 0))}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg py-2"
+            >
+              <Play className="w-5 h-5 mr-2" />
+              {state.isRunning ? 'Generating Batch...' : 'Generate Batch'}
+            </Button>
+          ) : (
+            <Button
+              onClick={generateResponse}
+              disabled={state.isRunning}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg py-2"
+            >
+              <Play className="w-5 h-5 mr-2" />
+              {state.isRunning ? 'Generating Response...' : 'Generate Response'}
+            </Button>
+          )}
 
-          <div className="flex space-x-2">
-            <Button variant="outline" onClick={clearResults} className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-100">
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Clear Results
-            </Button>
-            <Button variant="outline" className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-100">
-              <Save className="w-4 h-4 mr-2" />
-              Save Configuration
-            </Button>
-          </div>
+          <Button variant="outline" onClick={clearResults} className="w-full border-gray-300 text-gray-700 hover:bg-gray-100">
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Clear Results
+          </Button>
         </div>
       </div>
     </div>
