@@ -1,5 +1,5 @@
-
 import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { model, genAI } from '@/lib/gemini';
 
 export interface ParameterSet {
   id: string;
@@ -12,30 +12,57 @@ export interface ParameterSet {
   error?: string;
   responseTime?: number;
   wordCount?: number;
+  seed?: number;
+  batchId?: string;
+}
+
+export interface BatchSession {
+  id: string;
+  timestamp: number;
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  productInput: string;
+  results: ParameterSet[];
+  isComparing: boolean;
+  comparisonResult?: string;
 }
 
 export interface PlaygroundState {
-  model: 'gpt-3.5-turbo' | 'gpt-4';
+  model: 'gemini-1.5-flash-latest' | 'gemini-1.5-pro-latest';
   systemPrompt: string;
   userPrompt: string;
   productInput: string;
   stopSequence: string;
   results: ParameterSet[];
-  reflection: string;
   isRunning: boolean;
+  temperature: number;
+  maxTokens: number;
+  presencePenalty: number;
+  frequencyPenalty: number;
+  isBatched: boolean;
+  batchSessions: BatchSession[];
+  currentBatchId?: string;
+  isComparing: boolean;
+  variationCount?: number;
 }
 
 interface PlaygroundContextType {
   state: PlaygroundState;
-  updateModel: (model: 'gpt-3.5-turbo' | 'gpt-4') => void;
+  updateModel: (model: 'gemini-1.5-flash-latest' | 'gemini-1.5-pro-latest') => void;
   updateSystemPrompt: (prompt: string) => void;
   updateUserPrompt: (prompt: string) => void;
   updateProductInput: (input: string) => void;
   updateStopSequence: (sequence: string) => void;
-  updateReflection: (reflection: string) => void;
-  runAllCombinations: () => void;
+  updateTemperature: (temperature: number) => void;
+  updateMaxTokens: (maxTokens: number) => void;
+  updatePresencePenalty: (presencePenalty: number) => void;
+  updateFrequencyPenalty: (frequencyPenalty: number) => void;
+  updateIsBatched: (isBatched: boolean) => void;
+  updateVariationCount: (count: number) => void;
+  generateResponse: () => void;
   clearResults: () => void;
-  loadPreset: (presetName: string) => void;
+  compareBatchResults: (batchId: string) => void;
 }
 
 const PlaygroundContext = createContext<PlaygroundContextType | undefined>(undefined);
@@ -50,17 +77,24 @@ export const usePlayground = () => {
 
 export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<PlaygroundState>({
-    model: 'gpt-4',
+    model: 'gemini-1.5-flash-latest',
     systemPrompt: 'You are a product marketing expert with deep knowledge of consumer behavior and persuasive copywriting.',
     userPrompt: 'Create a compelling product description for {product}. Focus on benefits, unique features, and emotional appeal.',
     productInput: 'iPhone 15 Pro',
     stopSequence: '',
     results: [],
-    reflection: '',
     isRunning: false,
+    temperature: 0.7,
+    maxTokens: 150,
+    presencePenalty: 0.0,
+    frequencyPenalty: 0.0,
+    isBatched: false,
+    batchSessions: [],
+    isComparing: false,
+    variationCount: 5,
   });
 
-  const updateModel = (model: 'gpt-3.5-turbo' | 'gpt-4') => {
+  const updateModel = (model: 'gemini-1.5-flash-latest' | 'gemini-1.5-pro-latest') => {
     setState(prev => ({ ...prev, model }));
   };
 
@@ -80,112 +114,234 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     setState(prev => ({ ...prev, stopSequence }));
   };
 
-  const updateReflection = (reflection: string) => {
-    setState(prev => ({ ...prev, reflection }));
+  const updateTemperature = (temperature: number) => {
+    setState(prev => ({ ...prev, temperature }));
   };
 
-  const generateParameterCombinations = (): ParameterSet[] => {
-    const temperatures = [0.0, 0.7, 1.2];
-    const maxTokens = [50, 150, 300];
-    const presencePenalties = [0.0, 1.5];
-    const frequencyPenalties = [0.0, 1.5];
-
-    const combinations: ParameterSet[] = [];
-    let id = 1;
-
-    temperatures.forEach(temp => {
-      maxTokens.forEach(tokens => {
-        presencePenalties.forEach(presence => {
-          frequencyPenalties.forEach(frequency => {
-            combinations.push({
-              id: `combo-${id++}`,
-              temperature: temp,
-              maxTokens: tokens,
-              presencePenalty: presence,
-              frequencyPenalty: frequency,
-              isLoading: true,
-            });
-          });
-        });
-      });
-    });
-
-    return combinations;
+  const updateMaxTokens = (maxTokens: number) => {
+    setState(prev => ({ ...prev, maxTokens }));
   };
 
-  const mockApiCall = async (params: ParameterSet): Promise<string> => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 1000));
-    
-    const prompt = state.userPrompt.replace('{product}', state.productInput);
-    
-    // Mock different outputs based on temperature and other parameters
-    const baseOutputs = [
-      `Discover the revolutionary ${state.productInput} - where cutting-edge technology meets elegant design. Experience unparalleled performance with features that adapt to your lifestyle.`,
-      `Transform your daily routine with ${state.productInput}. Engineered for excellence, designed for you. Every detail crafted to exceed expectations.`,
-      `Introducing ${state.productInput} - the perfect fusion of innovation and reliability. Elevate your experience with premium quality that speaks for itself.`,
-      `Experience the future with ${state.productInput}. Advanced features, intuitive design, and exceptional performance come together in perfect harmony.`,
-    ];
+  const updatePresencePenalty = (presencePenalty: number) => {
+    setState(prev => ({ ...prev, presencePenalty }));
+  };
 
-    let output = baseOutputs[Math.floor(Math.random() * baseOutputs.length)];
-    
-    // Vary output based on temperature
-    if (params.temperature > 1.0) {
-      output += " Unleash your creativity and explore new possibilities with this game-changing innovation!";
-    } else if (params.temperature < 0.5) {
-      output = output.replace(/revolutionary|transform|perfect fusion/, "reliable");
+  const updateFrequencyPenalty = (frequencyPenalty: number) => {
+    setState(prev => ({ ...prev, frequencyPenalty }));
+  };
+
+  const updateIsBatched = (isBatched: boolean) => {
+    setState(prev => ({
+      ...prev,
+      isBatched,
+      ...(isBatched ? {} : { results: [], batchSessions: [], currentBatchId: undefined }),
+    }));
+  };
+
+  const updateVariationCount = (count: number) => {
+    setState(prev => ({ ...prev, variationCount: count }));
+  };
+
+  const generateParameterVariations = (baseParams: {
+    temperature: number;
+    maxTokens: number;
+    presencePenalty: number;
+    frequencyPenalty: number;
+  }): Array<{
+    temperature: number;
+    maxTokens: number;
+    presencePenalty: number;
+    frequencyPenalty: number;
+  }> => {
+    if (state.variationCount === undefined) {
+      throw new Error('Variation count must be set before generating batch responses');
+    }
+    return Array(state.variationCount).fill(baseParams);
+  };
+
+  const generateResponse = async () => {
+    if (state.isRunning) return;
+
+    if (state.isBatched && (state.variationCount === undefined || state.variationCount <= 0)) {
+      console.error('Variation count must be set to a positive number before generating batch responses');
+      return;
     }
 
-    // Vary length based on max tokens
-    if (params.maxTokens <= 50) {
-      output = output.substring(0, Math.min(output.length, 150));
-    } else if (params.maxTokens >= 300) {
-      output += " Built with premium materials and backed by industry-leading warranty, this product represents the pinnacle of modern engineering.";
-    }
-
-    return output;
-  };
-
-  const runAllCombinations = async () => {
     setState(prev => ({ ...prev, isRunning: true }));
-    const combinations = generateParameterCombinations();
-    setState(prev => ({ ...prev, results: combinations }));
 
-    // Process each combination
-    for (let i = 0; i < combinations.length; i++) {
-      const startTime = Date.now();
-      
-      try {
-        const output = await mockApiCall(combinations[i]);
-        const responseTime = Date.now() - startTime;
-        const wordCount = output.split(' ').length;
+    const startTime = Date.now();
+    const batchId = state.isBatched ? `batch-${Date.now()}` : undefined;
+
+    if (state.isBatched) {
+      setState(prev => ({
+        ...prev,
+        results: [],
+        currentBatchId: batchId,
+      }));
+
+      const baseParams = {
+        temperature: state.temperature,
+        maxTokens: state.maxTokens,
+        presencePenalty: state.presencePenalty,
+        frequencyPenalty: state.frequencyPenalty,
+      };
+
+      const parameterVariations = generateParameterVariations(baseParams);
+      const batchResults: ParameterSet[] = [];
+
+      const batchSession: BatchSession = {
+        id: batchId!,
+        timestamp: Date.now(),
+        model: state.model,
+        systemPrompt: state.systemPrompt,
+        userPrompt: state.userPrompt,
+        productInput: state.productInput,
+        results: [],
+        isComparing: false,
+      };
+
+      setState(prev => ({
+        ...prev,
+        batchSessions: [...prev.batchSessions, batchSession],
+      }));
+
+      for (const params of parameterVariations) {
+        const resultId = `response-${Date.now()}-${Math.random()}`;
+        const result: ParameterSet = {
+          id: resultId,
+          ...params,
+          isLoading: true,
+          batchId,
+        };
 
         setState(prev => ({
           ...prev,
-          results: prev.results.map(result => 
-            result.id === combinations[i].id 
-              ? { 
-                  ...result, 
-                  output, 
-                  isLoading: false, 
-                  responseTime,
-                  wordCount,
-                  error: undefined 
-                }
-              : result
+          results: [...prev.results, result],
+        }));
+
+        try {
+          const systemPrompt = state.systemPrompt.trim();
+          const userPrompt = state.userPrompt.replace('{product}', state.productInput).trim();
+          const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+          const genAIModel = genAI.getGenerativeModel({ model: state.model });
+
+          const output = await genAIModel.generateContent({
+            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+            generationConfig: {
+              temperature: params.temperature,
+              maxOutputTokens: params.maxTokens,
+              presencePenalty: params.presencePenalty,
+              frequencyPenalty: params.frequencyPenalty,
+              stopSequences: state.stopSequence ? state.stopSequence.split(',').map(s => s.trim()) : undefined
+            }
+          });
+
+          const response = await output.response;
+          const responseTime = Date.now() - startTime;
+          const wordCount = response.text().split(' ').length;
+
+          const completedResult = {
+            ...result,
+            output: response.text(),
+            isLoading: false,
+            responseTime,
+            wordCount,
+            error: undefined
+          };
+
+          setState(prev => ({
+            ...prev,
+            results: prev.results.map(r =>
+              r.id === resultId ? completedResult : r
+            ),
+            batchSessions: prev.batchSessions.map(session =>
+              session.id === batchId ? {
+                ...session,
+                results: [...session.results, completedResult]
+              } : session
+            )
+          }));
+
+        } catch (error) {
+          console.error('Error generating response for variation:', error);
+          const errorResult = {
+            ...result,
+            isLoading: false,
+            error: error instanceof Error ? error.message : 'Failed to generate output'
+          };
+          setState(prev => ({
+            ...prev,
+            results: prev.results.map(r =>
+              r.id === resultId ? errorResult : r
+            ),
+            batchSessions: prev.batchSessions.map(session =>
+              session.id === batchId ? {
+                ...session,
+                results: [...session.results, errorResult]
+              } : session
+            )
+          }));
+        }
+      }
+    } else {
+      const result: ParameterSet = {
+        id: `response-${Date.now()}`,
+        temperature: state.temperature,
+        maxTokens: state.maxTokens,
+        presencePenalty: state.presencePenalty,
+        frequencyPenalty: state.frequencyPenalty,
+        isLoading: true,
+      };
+
+      setState(prev => ({ ...prev, results: [result] }));
+
+      try {
+        const systemPrompt = state.systemPrompt.trim();
+        const userPrompt = state.userPrompt.replace('{product}', state.productInput).trim();
+        const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
+
+        const genAIModel = genAI.getGenerativeModel({ model: state.model });
+
+        const output = await genAIModel.generateContent({
+          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+          generationConfig: {
+            temperature: state.temperature,
+            maxOutputTokens: state.maxTokens,
+            presencePenalty: state.presencePenalty,
+            frequencyPenalty: state.frequencyPenalty,
+            stopSequences: state.stopSequence ? state.stopSequence.split(',').map(s => s.trim()) : undefined
+          }
+        });
+
+        const response = await output.response;
+        const responseTime = Date.now() - startTime;
+        const wordCount = response.text().split(' ').length;
+
+        setState(prev => ({
+          ...prev,
+          results: prev.results.map(r =>
+            r.id === result.id ? {
+              ...r,
+              output: response.text(),
+              isLoading: false,
+              responseTime,
+              wordCount,
+              error: undefined
+            } : r
           )
         }));
+
       } catch (error) {
+        console.error('Error generating response:', error);
         setState(prev => ({
           ...prev,
-          results: prev.results.map(result => 
-            result.id === combinations[i].id 
-              ? { 
-                  ...result, 
-                  isLoading: false, 
-                  error: 'Failed to generate output' 
-                }
-              : result
+          results: prev.results.map(r =>
+            r.id === result.id ? {
+              ...r,
+              isLoading: false,
+              error: error instanceof Error ? error.message : 'Failed to generate output'
+            } : r
           )
         }));
       }
@@ -194,33 +350,69 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     setState(prev => ({ ...prev, isRunning: false }));
   };
 
-  const clearResults = () => {
-    setState(prev => ({ ...prev, results: [], reflection: '' }));
+  const compareBatchResults = async (batchId: string) => {
+    const batchSession = state.batchSessions.find(session => session.id === batchId);
+    
+    if (!batchSession || batchSession.results.length === 0) {
+      console.log('No batch results available for comparison.');
+      return;
+    }
+    
+    if (batchSession.isComparing) {
+       console.log('Comparison already in progress for this batch.');
+       return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      batchSessions: prev.batchSessions.map(session =>
+        session.id === batchId ? { ...session, isComparing: true, comparisonResult: undefined } : session
+      ),
+    }));
+
+    try {
+      const systemPrompt = "You are an expert at analyzing and comparing multiple text outputs. Your task is to create a comprehensive comparison and synthesis of the following outputs.";
+      const userPrompt = `Compare and synthesize these outputs, highlighting their unique strengths and creating a comprehensive final version that combines the best elements:\n\n${batchSession.results.map((result, index) => `Output ${index + 1}:\n${result.output}\n`).join('\n')}`;
+
+      const genAIModel = genAI.getGenerativeModel({ model: state.model });
+
+      const output = await genAIModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2000,
+          presencePenalty: 0.5,
+          frequencyPenalty: 0.5,
+        }
+      });
+
+      const response = await output.response;
+      const comparisonResultText = response.text();
+
+      setState(prev => ({
+        ...prev,
+        batchSessions: prev.batchSessions.map(session =>
+          session.id === batchId ? {
+            ...session,
+            isComparing: false,
+            comparisonResult: comparisonResultText
+          } : session
+        ),
+      }));
+
+    } catch (error) {
+      console.error('Error comparing batch results:', error);
+      setState(prev => ({
+        ...prev,
+        batchSessions: prev.batchSessions.map(session =>
+          session.id === batchId ? { ...session, isComparing: false, comparisonResult: `Error during comparison: ${error instanceof Error ? error.message : String(error)}` } : session
+        ),
+      }));
+    }
   };
 
-  const loadPreset = (presetName: string) => {
-    const presets: Record<string, Partial<PlaygroundState>> = {
-      'Creative Writing': {
-        systemPrompt: 'You are a creative writing assistant specializing in engaging, imaginative content.',
-        userPrompt: 'Write a creative description for {product} that tells a story.',
-        productInput: 'Vintage Camera',
-      },
-      'Technical Documentation': {
-        systemPrompt: 'You are a technical writer focused on clear, accurate, and detailed documentation.',
-        userPrompt: 'Create technical specifications and features for {product}.',
-        productInput: 'Laptop Computer',
-      },
-      'Sales Copy': {
-        systemPrompt: 'You are a sales copywriter expert at creating compelling, conversion-focused content.',
-        userPrompt: 'Write persuasive sales copy for {product} that drives action.',
-        productInput: 'Fitness Tracker',
-      },
-    };
-
-    const preset = presets[presetName];
-    if (preset) {
-      setState(prev => ({ ...prev, ...preset }));
-    }
+  const clearResults = () => {
+    setState(prev => ({ ...prev, results: [], batchSessions: [], currentBatchId: undefined }));
   };
 
   return (
@@ -231,10 +423,15 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
       updateUserPrompt,
       updateProductInput,
       updateStopSequence,
-      updateReflection,
-      runAllCombinations,
+      updateTemperature,
+      updateMaxTokens,
+      updatePresencePenalty,
+      updateFrequencyPenalty,
+      updateIsBatched,
+      updateVariationCount,
+      generateResponse,
       clearResults,
-      loadPreset,
+      compareBatchResults,
     }}>
       {children}
     </PlaygroundContext.Provider>

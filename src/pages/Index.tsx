@@ -1,9 +1,7 @@
-
 import React from 'react';
 import { Header } from '@/components/Header';
 import { ConfigurationPanel } from '@/components/ConfigurationPanel';
 import { ResultsPanel } from '@/components/ResultsPanel';
-import { AnalysisPanel } from '@/components/AnalysisPanel';
 import { PlaygroundProvider } from '@/contexts/PlaygroundContext';
 
 const Index = () => {
@@ -17,14 +15,9 @@ const Index = () => {
             <ConfigurationPanel />
           </div>
           
-          {/* Results Panel - Center */}
-          <div className="w-full lg:w-[45%] border-r border-gray-200 bg-white">
+          {/* Results Panel - Right */}
+          <div className="w-full lg:w-[70%] bg-white">
             <ResultsPanel />
-          </div>
-          
-          {/* Analysis Panel - Right */}
-          <div className="w-full lg:w-[25%] bg-white">
-            <AnalysisPanel />
           </div>
         </div>
       </div>
